@@ -101,20 +101,14 @@ let carouselItems = [];
 // ── LOAD ────────────────────────────────────────────────────────────────────
 async function loadProducts() {
   try {
-    // Order by createdAt desc to get newest first, fallback to order asc
-    let snap;
-    try {
-      const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      snap = await getDocs(q);
-    } catch(e) {
-      const q = query(collection(db, 'products'), orderBy('order', 'asc'));
-      snap = await getDocs(q);
-    }
-    // Newest first for full list
-    allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e) {
+    // Simple load — sorting is done client-side
     const snap = await getDocs(collection(db, 'products'));
     allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) {
+    console.error('Erro ao carregar produtos:', e);
+    document.getElementById('productGrid').innerHTML =
+      '<div class="empty-state">// Erro ao carregar produtos. Verifique a conexão.</div>';
+    return;
   }
 
   const total = allProducts.length;
@@ -197,14 +191,18 @@ function renderGrid() {
   }
 
   const filtered = sorted.filter(p => {
-    const inCat = currentCat === 'todos' ||
-      (p.categories && p.categories.includes(currentCat));
+    const cats = Array.isArray(p.categories) ? p.categories : [];
+    const inCat = currentCat === 'todos' || cats.includes(currentCat);
     const inSearch = !currentSearch || (p.name && p.name.toLowerCase().includes(currentSearch));
     return inCat && inSearch;
   });
 
+  if (allProducts.length === 0) {
+    grid.innerHTML = '<div class="empty-state">// Carregando produtos...</div>';
+    return;
+  }
   if (filtered.length === 0) {
-    grid.innerHTML = '<div class="empty-state">// Nenhum produto encontrado</div>';
+    grid.innerHTML = '<div class="empty-state">// Nenhum produto encontrado nesta categoria</div>';
     return;
   }
 
