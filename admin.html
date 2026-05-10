@@ -358,6 +358,11 @@ body::before {
           <button type="button" class="cat-tag" data-cat="cavaleiros" onclick="toggleCat(this)">CAVALEIROS DO ZODÍACO</button>
           <button type="button" class="cat-tag" data-cat="outros" onclick="toggleCat(this)">OUTROS</button>
         </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.8rem;">
+          <input type="text" id="newCatInput" placeholder="Nova categoria..." style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:0.75rem;padding:0.4rem 0.7rem;outline:none;">
+          <button type="button" onclick="addCustomCat()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:0.65rem;letter-spacing:0.1em;padding:0.4rem 0.8rem;cursor:pointer;white-space:nowrap;">+ CRIAR</button>
+        </div>
+        <p class="img-hint">// Clique em uma categoria para selecionar. Crie novas categorias acima.</p>
       </div>
       <div class="field">
         <label>Imagem do produto *</label>
@@ -554,6 +559,25 @@ window.toggleCat = function(btn) {
   btn.classList.toggle('selected');
 };
 
+window.addCustomCat = function() {
+  const input = document.getElementById('newCatInput');
+  const val   = input.value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!val) return;
+  // Check if already exists
+  if (document.querySelector(`.cat-tag[data-cat="${val}"]`)) {
+    input.value = '';
+    return;
+  }
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cat-tag selected';
+  btn.dataset.cat = val;
+  btn.textContent = val.toUpperCase();
+  btn.onclick = function() { toggleCat(this); };
+  document.getElementById('catSelect').appendChild(btn);
+  input.value = '';
+};
+
 window.handleImage = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -598,7 +622,11 @@ window.saveProduct = async function() {
   saveBtn.disabled = true;
   saveBtn.textContent = 'SALVANDO...';
 
-  const data = { name, size, price, order, categories: cats, img: currentImg };
+  const isNew = !id;
+  const data = {
+    name, size, price, order, categories: cats, img: currentImg,
+    ...(isNew ? { createdAt: Date.now() } : {})
+  };
 
   try {
     if (id) {

@@ -27,6 +27,20 @@
   </div>
 </section>
 
+<section class="carousel-section" id="carouselSection" style="display:none">
+  <div class="carousel-header">
+    <div class="carousel-title">NOVIDADES</div>
+    <span class="carousel-badge">ÚLTIMOS ADICIONADOS</span>
+  </div>
+  <div class="carousel-track-wrap">
+    <div class="carousel-track" id="carouselTrack"></div>
+  </div>
+  <div class="carousel-nav">
+    <button class="carousel-btn" onclick="carouselPrev()">&#8592;</button>
+    <button class="carousel-btn" onclick="carouselNext()">&#8594;</button>
+  </div>
+</section>
+
 <div class="search-wrap">
   <input class="search-input" type="text" placeholder="// BUSCAR FIGURA..." oninput="filterSearch(this.value)" id="searchInput">
 </div>
@@ -78,26 +92,27 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
-const categoryMap = {
-  'anime':      ['Mark Invencível','Kakashi Hatake','Shiryu de Dragão','Conjunto One Piece versão Chibi','Tanjiro Kamado','Gohan Beast','Zoro One Piece','Ikki de Fênix Armadura de Bronze','Saga de Gêmeos de Ouro','Shaka de Virgem versão Chibi','Aiolia de Leão Cavaleiro de Ouro','Piccolo Daima','Vegeta Kid SSJ3 Daima','Goku Kid SSJ3 Daima','Luffy One Piece','Gengar Pokémon','MewTwo'],
-  'filmes':     ['Deadpool','Crânio T800 Exterminador do Futuro 2 c/ Iluminação','Espada Hobbit','Shadow Urbano com Air Jordan','Sonic Urbano com Air Jordan','Demogorgon Pintado a Mão','Porta Lápis Diorama Mario','Busto Witcher','Darth Vader Urbano','Capacete Iron Man','Estádio de Quadribol Harry Potter'],
-  'marvel':     ['Deadpool','Wolverine Logan','Vampira Xmen 97','Fera Xmen versão Chibi','Ciclope Xmen 97','Wolverine Clássico','Capacete Iron Man'],
-  'cavaleiros': ['Ikki de Fênix Armadura de Bronze','Shiryu de Dragão','Shaka de Virgem versão Chibi','Saga de Gêmeos de Ouro','Aiolia de Leão Cavaleiro de Ouro'],
-  'outros':     ['Homer Simpson','Porta Lápis Diorama Mario']
-};
-
-let allProducts = [];
-let currentCat  = 'todos';
+let allProducts   = [];
+let currentCat    = 'todos';
 let currentSearch = '';
+let carouselIndex = 0;
+let carouselItems = [];
 
+// ── LOAD ────────────────────────────────────────────────────────────────────
 async function loadProducts() {
-  const grid = document.getElementById('productGrid');
   try {
-    const q    = query(collection(db, 'products'), orderBy('order', 'asc'));
-    const snap = await getDocs(q);
+    // Order by createdAt desc to get newest first, fallback to order asc
+    let snap;
+    try {
+      const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+      snap = await getDocs(q);
+    } catch(e) {
+      const q = query(collection(db, 'products'), orderBy('order', 'asc'));
+      snap = await getDocs(q);
+    }
+    // Newest first for full list
     allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch(e) {
-    // fallback: no order field
     const snap = await getDocs(collection(db, 'products'));
     allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
@@ -106,15 +121,84 @@ async function loadProducts() {
   document.getElementById('totalCount').textContent = total;
   document.getElementById('statCount').textContent  = total;
 
+  buildCarousel();
   renderGrid();
 }
 
+// ── CAROUSEL ────────────────────────────────────────────────────────────────
+function buildCarousel() {
+  // Take up to 3 newest (first in array since sorted by createdAt desc)
+  // fallback: last 3 by order
+  let newest = [];
+  if (allProducts.some(p => p.createdAt)) {
+    const sorted = [...allProducts].sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    newest = sorted.slice(0, 3);
+  } else {
+    const sorted = [...allProducts].sort((a,b) => (b.order||0) - (a.order||0));
+    newest = sorted.slice(0, 3);
+  }
+
+  if (newest.length === 0) return;
+  carouselItems = newest;
+  carouselIndex = 0;
+
+  const track = document.getElementById('carouselTrack');
+  track.innerHTML = newest.map(p => `
+    <div class="carousel-card" onclick="openModal('${p.id}')">
+      <div class="carousel-img-wrap">
+        <span class="carousel-badge-new">NOVO</span>
+        <img src="${p.img}" alt="${p.name}" loading="lazy">
+      </div>
+      <div class="carousel-info">
+        <div class="carousel-name">${p.name}</div>
+        <div class="carousel-meta">
+          <span class="carousel-size">⬡ ${p.size}</span>
+          <span class="carousel-price">${p.price}</span>
+        </div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('carouselSection').style.display = 'block';
+}
+
+window.carouselPrev = function() {
+  const track = document.getElementById('carouselTrack');
+  const card  = track.querySelector('.carousel-card');
+  if (!card) return;
+  const cardW = card.offsetWidth + 1;
+  carouselIndex = Math.max(0, carouselIndex - 1);
+  track.style.transform = `translateX(-${carouselIndex * cardW}px)`;
+};
+
+window.carouselNext = function() {
+  const track = document.getElementById('carouselTrack');
+  const card  = track.querySelector('.carousel-card');
+  if (!card) return;
+  const cardW = card.offsetWidth + 1;
+  const max   = Math.max(0, carouselItems.length - getVisible());
+  carouselIndex = Math.min(max, carouselIndex + 1);
+  track.style.transform = `translateX(-${carouselIndex * cardW}px)`;
+};
+
+function getVisible() {
+  return window.innerWidth <= 650 ? 1 : window.innerWidth <= 900 ? 2 : 3;
+}
+
+// ── GRID ────────────────────────────────────────────────────────────────────
 function renderGrid() {
   const grid = document.getElementById('productGrid');
-  const filtered = allProducts.filter(p => {
+
+  // Sort: newest first (by createdAt desc, then by order asc as fallback)
+  let sorted = [...allProducts];
+  if (sorted.some(p => p.createdAt)) {
+    sorted.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  } else {
+    sorted.sort((a,b) => (a.order||999) - (b.order||999));
+  }
+
+  const filtered = sorted.filter(p => {
     const inCat = currentCat === 'todos' ||
-      (categoryMap[currentCat] || []).some(n => p.name && p.name.toLowerCase().includes(n.toLowerCase())) ||
-      (p.category && p.category === currentCat);
+      (p.categories && p.categories.includes(currentCat));
     const inSearch = !currentSearch || (p.name && p.name.toLowerCase().includes(currentSearch));
     return inCat && inSearch;
   });
@@ -144,6 +228,7 @@ function renderGrid() {
   });
 }
 
+// ── FILTERS ─────────────────────────────────────────────────────────────────
 window.filterCat = function(cat, btn) {
   currentCat = cat;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -156,6 +241,7 @@ window.filterSearch = function(val) {
   renderGrid();
 };
 
+// ── MODAL ───────────────────────────────────────────────────────────────────
 window.openModal = function(id) {
   const p = allProducts.find(x => x.id === id);
   if (!p) return;
@@ -197,4 +283,3 @@ document.addEventListener('keydown', e => {
 loadProducts();
 </script>
 </body>
-</html>
